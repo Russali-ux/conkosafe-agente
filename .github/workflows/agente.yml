@@ -1,0 +1,54 @@
+name: 🤖 Agente ConkoSafe IA
+
+# Se despierta de 3 formas:
+#   1. repository_dispatch  -> lo dispara la Edge Function agente-despachar al enviar una tarea (≈30 s)
+#   2. schedule cada 15 min -> red de seguridad (GitHub puede retrasarlo bastante)
+#   3. workflow_dispatch    -> manual, opcionalmente con un tarea_id
+on:
+  repository_dispatch:
+    types: [agente_tarea]
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      tarea_id:
+        description: 'UUID de la tarea (vacío = todas las pendientes)'
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agente-${{ github.event.client_payload.tarea_id || github.event.inputs.tarea_id || 'pendientes' }}
+  cancel-in-progress: false
+
+jobs:
+  agente:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Instalar dependencias
+        run: pip install --quiet -r requirements.txt
+
+      - name: Ejecutar agente
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AGENTE_MODELO: ${{ vars.AGENTE_MODELO }}
+          ANALYZER_DISPATCH_TOKEN: ${{ secrets.ANALYZER_DISPATCH_TOKEN }}
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TAREA: ${{ github.event.client_payload.tarea_id || github.event.inputs.tarea_id }}
+        run: |
+          if [ -n "$TAREA" ]; then
+            python agente.py --tarea "$TAREA"
+          else
+            python agente.py --pendientes
+          fi
