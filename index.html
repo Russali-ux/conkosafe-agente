@@ -485,7 +485,8 @@ async function enviar() {
   const { data, error } = await sb.from('agente_tareas').insert({ instruccion }).select().single();
   if (error) { $('estadoEnvio').textContent = 'No se pudo enviar: ' + error.message; $('enviar').disabled = false; return; }
   $('instr').value = '';
-  tareas.unshift(data); renderTareas(); seleccionar(data.id);
+  if (!tareas.some(t => t.id === data.id)) tareas.unshift(data);  // el tiempo real puede haberla agregado ya
+  renderTareas(); seleccionar(data.id);
   const { data: r, error: e2 } = await sb.functions.invoke('agente-despachar', { body: { tarea_id: data.id } });
   $('estadoEnvio').textContent = (!e2 && r?.ok)
     ? 'Tarea enviada. El agente arranca en unos segundos.'
