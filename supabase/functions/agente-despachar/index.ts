@@ -7,7 +7,7 @@
 // Secretos (Supabase → Edge Functions → Secrets):
 //   GH_DISPATCH_TOKEN  PAT fine-grained del repo conkosafe-agente con
 //                      permiso "Contents: Read and write"
-//   GH_REPO            Russali-ux/conkosafe-agente
+//   (GH_REPO ya no se usa: el repo está fijo en el código)
 // SUPABASE_URL y SUPABASE_ANON_KEY ya vienen inyectadas.
 //
 // Si esta función falla, la tarea no se pierde:
@@ -44,7 +44,8 @@ Deno.serve(async (req) => {
   if (tarea.estado !== "pendiente") return json({ ok: true, aviso: `La tarea ya está ${tarea.estado}` });
 
   const token = Deno.env.get("GH_DISPATCH_TOKEN")?.trim();
-  const repo = (Deno.env.get("GH_REPO") ?? "Russali-ux/conkosafe-agente").trim();
+  // Repo fijo: el agente solo vive aquí (así un GH_REPO viejo apuntando a Alertas-analyzer no lo desvía).
+  const repo = "Russali-ux/conkosafe-agente";
   if (!token) return json({ ok: false, aviso: "Sin GH_DISPATCH_TOKEN; la tomará el ciclo de 15 min" });
 
   const r = await fetch(`https://api.github.com/repos/${repo}/dispatches`, {

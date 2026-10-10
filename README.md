@@ -52,7 +52,6 @@ agente_eventos ◀── cada paso ── agente.py (GitHub Actions de ESTE repo
 **GitHub → Settings → Pages:** Source *Deploy from a branch*, rama `main`, carpeta `/ (root)`.
 
 **Supabase → Edge Functions → Secrets:**
-- `GH_REPO = Russali-ux/conkosafe-agente`
 - `GH_DISPATCH_TOKEN` = PAT fine-grained con acceso a **conkosafe-agente** y permiso *Contents: Read and write*.
 
 ## Probar en local
