@@ -19,6 +19,25 @@ agente_eventos ◀── cada paso ── agente.py (GitHub Actions de ESTE repo
                                    └ escribe solo en agente_tareas / agente_eventos
 ```
 
+## Análisis de corridas de Conkosafe Lab (datos SIMULADOS)
+
+La [Planta farmacéutica](https://conkosafe-lab-web.vercel.app/produccion) abre este tablero con
+`?origen=lab_planta&corrida=<archivo>.json&p=<foto del producto en base64url>`. Tú revisas la instrucción y la envías;
+la tarea queda con `tipo = analisis_corrida`, `origen = lab_planta` y la foto en `contexto` (migración `002`).
+
+- Herramienta `leer_corrida_lab`: solo corridas listadas en `https://conkosafe-lab-web.vercel.app/data/index.json`
+  (URL fija, tope de tamaño, SHA-256 registrado en la bitácora, estación «Conkosafe Lab (simulado)»).
+- Privilegio mínimo: estas tareas no ven el portafolio ni disparan scrapers.
+- El informe tiene tres secciones (hallazgos simulados · contraste con fuentes reales · limitaciones). El código añade
+  el aviso de datos simulados y lo **rechaza** si el contraste real nombra un fármaco ficticio o repite una métrica de
+  la corrida (un reintento; luego `error`).
+- Sin `ANTHROPIC_API_KEY`, el motor heurístico arma el mismo informe con tablas y conteos.
+
+Pruebas sin red: `pip install pytest && python -m pytest`.
+
+`.claude/agents/` trae 20 agentes de desarrollo de [agency-agents](https://github.com/msitarzewski/agency-agents) (MIT)
+para trabajar este repo con Claude Code (ver `docs/AGENTES-IA.md` en conkosafe-lab).
+
 ## Qué comparte con Alertas-analyzer y qué no
 
 | | Alertas-analyzer | conkosafe-agente |
@@ -37,6 +56,8 @@ agente_eventos ◀── cada paso ── agente.py (GitHub Actions de ESTE repo
 | `.github/workflows/agente.yml` | Ejecuta el agente |
 | `supabase/functions/agente-despachar/index.ts` | Edge Function que despierta al agente |
 | `supabase/migrations/001_agente.sql` | Tablas `agente_tareas` y `agente_eventos` (ya aplicada) |
+| `supabase/migrations/002_agente_origen_lab.sql` | Columnas `tipo`, `origen`, `contexto` para tareas del lab (ya aplicada) |
+| `tests/` | Pruebas sin red de la integración con Conkosafe Lab |
 
 ## Configuración
 

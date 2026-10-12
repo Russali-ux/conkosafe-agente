@@ -125,6 +125,10 @@ h2{margin:0;font-size:12px;font-family:var(--mono);text-transform:uppercase;lett
 @media (max-width:1100px){.main{grid-template-columns:1fr}.tasks{max-height:none}.tasklist{flex-direction:row;overflow-x:auto}.task{min-width:220px}}
 @media (max-width:760px){.cards{display:none}.stationlist{display:grid}.bottom{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){.spin,.pulse{animation:none}}
+/* Encargo desde Conkosafe Lab (datos SIMULADOS) */
+.encargo{border:1px solid var(--line);border-left:4px solid #7a8a1f;background:var(--bg);border-radius:10px;padding:9px 12px;margin:0 0 10px;font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.encargo .x{all:unset;cursor:pointer;margin-left:auto;font:12px var(--mono);color:var(--muted);text-decoration:underline}
+.sim{font:10px var(--mono);letter-spacing:.04em;background:#7a8a1f;color:#fff;border-radius:4px;padding:2px 6px}
 </style>
 </head>
 <body>
@@ -144,6 +148,7 @@ h2{margin:0;font-size:12px;font-family:var(--mono);text-transform:uppercase;lett
 
   <section class="panel composer" aria-labelledby="hComp">
     <h2 id="hComp">Nueva tarea para el agente</h2>
+    <div class="encargo" id="encargo" hidden></div>
     <textarea id="instr" placeholder="Ej.: Revisa todas las fuentes por «valproato» en los últimos 12 meses y cruza con el portafolio"></textarea>
     <div class="row" id="sugs"></div>
     <div class="row">
@@ -204,6 +209,7 @@ const EST = [
   {k:'ema',            n:'EMA PRAC',          c:'#6044b8', g:[0,2]},
   {k:'india',          n:'India · CDSCO/PvPI',c:'#0f97a6', g:[1,2]},
   {k:'portafolio',     n:'Portafolio',        c:'#b8417e', g:[2,2]},
+  {k:'lab',            n:'Conkosafe Lab (simulado)', c:'#7a8a1f', g:[3,2]},
   {k:'informe',        n:'Informe',           c:'#3d4b5c', g:[3,3]},
 ];
 const P = 180, TW = 112, TH = 56;           // paso de cuadrícula y semiejes de la baldosa
@@ -218,6 +224,47 @@ const SUGERENCIAS = [
 
 // ===================== Estado =====================
 let sb = null, usuario = null, demo = false;
+let encargoLab = null;   // foto de la Planta de Conkosafe Lab cuando se llega desde /produccion
+
+// ===================== Encargo desde Conkosafe Lab =====================
+// La Planta abre esta página con ?origen=lab_planta&corrida=X.json&p=<base64url JSON>. Todo se valida aquí y
+// otra vez en agente.py; el usuario revisa la instrucción y la envía él mismo (no hay envío automático).
+const RE_CORRIDA = /^[A-Za-z0-9][A-Za-z0-9-]{2,60}\.json$/;
+function leerEncargoLab() {
+  const q = new URLSearchParams(location.search);
+  if (q.get('origen') !== 'lab_planta') return;
+  const corrida = q.get('corrida') || '';
+  if (!RE_CORRIDA.test(corrida)) return;
+  let producto = null;
+  try {
+    const b64 = (q.get('p') || '').replace(/-/g, '+').replace(/_/g, '/');
+    if (b64 && b64.length < 4000) {
+      const crudo = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0))));
+      if (crudo && typeof crudo === 'object' && !Array.isArray(crudo)) {
+        producto = {};
+        for (const k of ['codigo','nombre','principio_activo','atc','via','forma','metodo'])
+          if (crudo[k] != null && crudo[k] !== '') producto[k] = String(crudo[k]).slice(0, 80);
+        for (const k of ['unidades_liberadas','paciente_anios','paciente_anios_cohorte','icsr','tasa_x_millon_unid','cobertura','ddd'])
+          if (Number.isFinite(crudo[k])) producto[k] = crudo[k];
+      }
+    }
+  } catch (e) { producto = null; }
+  encargoLab = { naturaleza:'SIMULADO', corrida, ...(producto ? { producto } : {}) };
+  const nombre = producto?.nombre || producto?.codigo;
+  $('encargo').hidden = false;
+  $('encargo').innerHTML = `<span class="sim">SIMULADO</span><span>Encargo de la <b>Planta farmacéutica</b> · corrida <b>${esc(corrida)}</b>${nombre ? ` · ${esc(nombre)}` : ''}</span><button class="x" type="button" id="quitarEncargo">quitar</button>`;
+  $('quitarEncargo').onclick = quitarEncargoLab;
+  if (!$('instr').value.trim())
+    $('instr').value = `Analiza la corrida simulada ${corrida.replace(/\.json$/, '')}` +
+      (nombre ? ` para el producto ${nombre}: ` : ': ') +
+      'señales detectadas vs. sembradas, desempeño de los métodos, SIR/IRR y la tasa de notificación de la Planta. ' +
+      'Contrasta por separado con las fuentes reales los principios activos reales de la corrida.';
+}
+function quitarEncargoLab() {
+  encargoLab = null;
+  $('encargo').hidden = true; $('encargo').innerHTML = '';
+  history.replaceState(null, '', location.pathname + location.hash);
+}
 let tareas = [], actual = null, eventos = [], canal = null, sondeo = null, filtroEst = null;
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -253,10 +300,11 @@ function dibujarBase() {
   const roads = el('g', {id:'roads'}, g);
   const centro = pos([1,1]);
   for (const s of EST) {
-    if (s.k === 'agente' || s.k === 'informe') continue;
+    if (s.k === 'agente' || s.k === 'informe' || s.k === 'lab') continue;
     camino(roads, centro, pos(s.g), s.k);
   }
   camino(roads, pos([2,2]), pos([3,3]), 'informe');
+  camino(roads, pos([3,2]), pos([3,3]), 'lab');   // la corrida simulada entra al informe por su propio camino
 
   // baldosas
   const tiles = el('g', {id:'tiles'}, g);
@@ -428,7 +476,7 @@ function renderTareas() {
   if (!tareas.length) { box.innerHTML = '<div class="vacio">Todavía no has enviado tareas.</div>'; return; }
   box.innerHTML = tareas.map(t => `<button class="task" type="button" data-id="${t.id}" aria-current="${actual?.id === t.id}">
       <span class="t">${esc(t.instruccion)}</span>
-      <span class="m"><span class="badge b-${t.estado}">${ESTADO_TXT[t.estado]}</span>${fechaCorta(t.creado_en)}</span></button>`).join('');
+      <span class="m">${t.tipo === 'analisis_corrida' ? '<span class="sim">SIMULADO</span>' : ''}<span class="badge b-${t.estado}">${ESTADO_TXT[t.estado]}</span>${fechaCorta(t.creado_en)}</span></button>`).join('');
   box.querySelectorAll('.task').forEach(b => b.onclick = () => seleccionar(b.dataset.id));
 }
 
@@ -482,9 +530,11 @@ async function enviar() {
     $('enviar').disabled = false; return;
   }
   $('estadoEnvio').textContent = 'Enviando…';
-  const { data, error } = await sb.from('agente_tareas').insert({ instruccion }).select().single();
+  const fila = encargoLab ? { instruccion, tipo:'analisis_corrida', origen:'lab_planta', contexto:encargoLab } : { instruccion };
+  const { data, error } = await sb.from('agente_tareas').insert(fila).select().single();
   if (error) { $('estadoEnvio').textContent = 'No se pudo enviar: ' + error.message; $('enviar').disabled = false; return; }
   $('instr').value = '';
+  if (encargoLab) quitarEncargoLab();
   if (!tareas.some(t => t.id === data.id)) tareas.unshift(data);  // el tiempo real puede haberla agregado ya
   renderTareas(); seleccionar(data.id);
   const { data: r, error: e2 } = await sb.functions.invoke('agente-despachar', { body: { tarea_id: data.id } });
@@ -583,6 +633,7 @@ async function iniciar() {
   $('sugs').querySelectorAll('.sug').forEach(b => b.onclick = () => { $('instr').value = b.textContent; $('instr').focus(); });
   $('enviar').onclick = enviar;
   $('cancelar').onclick = cancelar;
+  leerEncargoLab();
   $('instr').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) enviar(); });
 
   let session = null;
